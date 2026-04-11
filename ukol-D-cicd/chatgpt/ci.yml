@@ -1,0 +1,126 @@
+# GitHub Actions CI/CD pipeline for demo projekt
+# This workflow runs on push or pull request events targeting the `main` branch.
+# It builds and tests both the backend (.NET) and the frontend (React/Vite)
+# and publishes the resulting build artifacts for later use.
+
+name: CI
+
+#########################
+# Global environment for actions
+#
+# Node.js 20 LTS will reach end‑of‑life in April 2026. GitHub Actions plan to
+# migrate JavaScript actions to Node 24 starting June 2nd, 2026【934042680749203†L40-L55】. To opt in to
+# Node 24 early and silence deprecation warnings, set
+# `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` for all jobs. This tells the
+# runner to execute built‑in actions (checkout, setup‑node, setup‑dotnet) on
+# Node 24 immediately instead of the soon‑to‑be‑removed Node 20.
+# See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend:
+    name: Build and test backend
+    runs-on: ubuntu-latest
+    # start a PostgreSQL service to satisfy any integration tests
+    # A PostgreSQL service is included for integration tests. The backend tests use EF Core's
+    # In‑Memory provider, so the database isn’t strictly necessary. However, if future
+    # tests require a real database, this service will be available. It can be removed
+    # safely if not needed.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: physiobook
+          POSTGRES_USER: physiobook
+          POSTGRES_PASSWORD: CHANGE_ME_DB_PASSWORD
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U physiobook" --health-interval=5s --health-timeout=5s --health-retries=5
+    steps:
+      # Check out repository code
+      - uses: actions/checkout@v4
+
+      # Install the required .NET SDK
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Restore NuGet dependencies for the application and tests
+      - name: Restore dependencies
+        run: |
+          dotnet restore PhysioBook/PhysioBook.csproj
+          dotnet restore PhysioBook.Tests/PhysioBook.Tests.csproj
+
+      # Build the application
+      - name: Build backend
+        run: dotnet build PhysioBook/PhysioBook.csproj --configuration Release --no-restore
+
+      # Run the test suite
+      - name: Test backend
+        env:
+          # Override the connection string so that tests can connect to the service container
+          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=physiobook;Username=physiobook;Password=CHANGE_ME_DB_PASSWORD
+        # Run `dotnet test` without --no-build so that the test project is built. Previously
+        # the job used `--no-build` but didn’t build the test project explicitly, causing
+        # the command to fail with exit code 1. `dotnet test` will build the test project
+        # automatically when needed.
+        run: dotnet test PhysioBook.Tests/PhysioBook.Tests.csproj --configuration Release --verbosity normal
+
+      # Publish the compiled backend for distribution
+      - name: Publish backend
+        run: dotnet publish PhysioBook/PhysioBook.csproj --configuration Release --no-build --output backend-publish
+
+      # Upload build artifacts
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: backend-publish
+
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      # Check out repository code
+      - uses: actions/checkout@v4
+
+      # Install Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          # cache-dependency-path tells the action where to look for the lock file. Without this
+          # setting the action searches the repository root and emits a warning when it
+          # cannot find a lock file. The frontend resides in the `physiobook-frontend` folder,
+          # where its `package-lock.json` lives. Point cache‑dependency‑path there to enable
+          # automatic npm caching.
+          cache-dependency-path: physiobook-frontend/package-lock.json
+
+      # Install dependencies
+      - name: Install dependencies
+        working-directory: physiobook-frontend
+        run: npm ci
+
+      # Build the frontend application
+      - name: Build frontend
+        working-directory: physiobook-frontend
+        run: npm run build
+
+      # Upload build artifacts
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: physiobook-frontend/dist

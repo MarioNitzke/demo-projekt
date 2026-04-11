@@ -1,0 +1,42 @@
+# ───── macOS / OS noise ─────
+.DS_Store
+Thumbs.db
+
+# ───── Office lock files ─────
+~$*
+
+# ───── Claude Code local config ─────
+.claude/
+
+# ───── Env files (may contain secrets) ─────
+.env
+.env.*
+**/.env
+**/.env.*
+
+# ───── Node ─────
+node_modules/
+dist/
+build/
+*.log
+.vite/
+
+# ───── .NET ─────
+[Bb]in/
+[Oo]bj/
+**/bin/
+**/obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# ───── IDE ─────
+.vscode/
+.idea/
+*.swp

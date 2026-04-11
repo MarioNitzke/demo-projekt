@@ -1,0 +1,9 @@
+namespace PhysioBook.Data.Enums;
+
+public enum BookingStatus
+{
+    Pending,
+    Confirmed,
+    Cancelled,
+    Completed
+}

@@ -1,0 +1,96 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend build and tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: physiobook
+          POSTGRES_USER: physiobook
+          POSTGRES_PASSWORD: CHANGE_ME_DB_PASSWORD
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U physiobook"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=physiobook;Username=physiobook;Password=CHANGE_ME_DB_PASSWORD
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore backend dependencies
+        run: dotnet restore PhysioBook.sln
+
+      - name: Build backend
+        run: dotnet build PhysioBook.sln --configuration Release --no-restore
+
+      - name: Run backend tests
+        run: dotnet test PhysioBook.Tests/PhysioBook.Tests.csproj --configuration Release --no-build --logger "trx;LogFileName=backend-tests.trx" --results-directory ./artifacts/backend/test-results
+
+      - name: Publish backend
+        run: dotnet publish PhysioBook/PhysioBook.csproj --configuration Release --no-build --output ./artifacts/backend/publish
+
+      - name: Upload backend artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build-and-test-results
+          path: |
+            artifacts/backend/publish
+            artifacts/backend/test-results
+          if-no-files-found: error
+
+  frontend:
+    name: Frontend build and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: physiobook-frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: physiobook-frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend tests (if present)
+        run: npm run test --if-present
+
+      - name: Upload frontend artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: physiobook-frontend/dist
+          if-no-files-found: error
+

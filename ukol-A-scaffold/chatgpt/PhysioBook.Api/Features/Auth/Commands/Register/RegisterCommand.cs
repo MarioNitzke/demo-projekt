@@ -1,0 +1,8 @@
+namespace PhysioBook.Api.Features.Auth.Commands.Register;
+
+public sealed class RegisterCommand : IQuery<RegisterResponse>
+{
+    public required string FullName { get; init; }
+    public required string Email { get; init; }
+    public required string Password { get; init; }
+}

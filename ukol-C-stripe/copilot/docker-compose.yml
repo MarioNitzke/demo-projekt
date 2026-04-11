@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: physiobook
+      POSTGRES_USER: physiobook
+      POSTGRES_PASSWORD: CHANGE_ME_DB_PASSWORD
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U physiobook"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: PhysioBook/Dockerfile
+    ports:
+      - "5050:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=physiobook;Username=physiobook;Password=CHANGE_ME_DB_PASSWORD
+      - JwtSettings__Secret=YourSuperSecretKeyThatIsAtLeast32CharactersLong!
+      - JwtSettings__Issuer=PhysioBook
+      - JwtSettings__Audience=PhysioBook
+      - JwtSettings__ExpirationInMinutes=60
+      - JwtSettings__RefreshTokenExpirationInDays=7
+      - Stripe__SecretKey=sk_test_REDACTED
+      - Stripe__PublishableKey=pk_test_REDACTED
+      - Stripe__WebhookSecret=whsec_REDACTED
+      - Stripe__Currency=czk
+      - Stripe__FrontendBaseUrl=http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./physiobook-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
